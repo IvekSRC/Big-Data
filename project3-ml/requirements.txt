@@ -1,0 +1,4 @@
+pyspark
+kafka-python
+python-dotenv
+influxdb
