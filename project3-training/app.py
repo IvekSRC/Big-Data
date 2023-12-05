@@ -2,9 +2,10 @@ from pyspark.sql import SparkSession
 from pyspark.ml.classification import LogisticRegression
 from pyspark.ml import Pipeline, PipelineModel
 from pyspark.ml.feature import VectorIndexer, VectorAssembler, StringIndexer
-from pyspark.sql.types import FloatType
+from pyspark.sql.types import FloatType, StructType
 import pyspark.sql.functions as F
-from pyspark.ml.evaluation import BinaryClassificationEvaluator
+from pyspark.ml.regression import LinearRegression
+from pyspark.ml.evaluation import RegressionEvaluator
 import os
 from dotenv import load_dotenv
 
@@ -18,7 +19,22 @@ def main():
     DATASET = os.getenv('DATASET')
     MODEL = os.getenv('MODEL_PATH')
 
-    dataFrame = spark.read.csv(HDFS_DATA, header=True)
+    dataSchema = StructType() \
+        .add("started_at", "timestamp") \
+        .add("ended_at", "timestamp") \
+        .add("duration", "string") \
+        .add("start_station_id", "string") \
+        .add("start_station_name", "string") \
+        .add("start_station_description", "string") \
+        .add("start_station_latitude", "decimal") \
+        .add("start_station_longitude", "decimal") \
+        .add("end_station_id", "string") \
+        .add("end_station_name", "string") \
+        .add("end_station_description", "string") \
+        .add("end_station_latitude", "decimal") \
+        .add("end_station_longitude", "decimal")
+
+    dataFrame = spark.read.csv(HDFS_DATA, header=True, schema=dataSchema)
 
     columns_to_cast = ['start_station_id', 'end_station_id']
 
@@ -36,19 +52,16 @@ def main():
 
     print("The model training has started.")
 
-    regressionModel = LogisticRegression(maxIter=100, regParam=0.02, elasticNetParam=0.8)
+    regressionModel = LinearRegression(featuresCol='features', labelCol='label', maxIter=100, regParam=0.02, elasticNetParam=0.8)
 
     pipeline = Pipeline(stages=[regressionModel])
     regressionModelPipe = pipeline.fit(train_split)
 
     prediction = regressionModelPipe.transform(test_split)
 
-    evaluator = BinaryClassificationEvaluator(labelCol='label', rawPredictionCol='prediction',
-                                              metricName='areaUnderPR')
-    print("The evaluation has started.")
-    accuracy = evaluator.evaluate(prediction)
-
-    print('Accuracy\'s value for logistic regression model is: ' + str(accuracy))
+    evaluator = RegressionEvaluator(labelCol='label', predictionCol='prediction', metricName='rmse')
+    rmse = evaluator.evaluate(prediction)
+    print("Root Mean Squared Error (RMSE) on test data: %g" % rmse)
 
     regressionModelPipe.write().overwrite().save(MODEL)
 
