@@ -39,14 +39,13 @@ def generatePredictions(df, epoch, model):
     columns = ['start_station_id', 'end_station_id']
     for column in columns:
         df = df.withColumn(column, F.col(column).cast(FloatType()))
+    df = df.withColumn('label', F.col('duration').cast(FloatType()))
     vectorAssembler = VectorAssembler().setInputCols(columns).setOutputCol('features').setHandleInvalid('skip')
     assembled = vectorAssembler.transform(df)
-    stringIndexer = StringIndexer().setInputCol('duration').setOutputCol('label')
-    indexedDataFrame = stringIndexer.fit(assembled).transform(assembled)
-    prediction = model.transform(indexedDataFrame)
-    prediction.select('prediction', 'label')
+    prediction = model.transform(assembled)
+    prediction.select('prediction', 'label', 'features').show(truncate=False)
     predictionsNumber = prediction.count()
-    validPredictions = float(prediction.filter(prediction['label'] == prediction['prediction']).count())
+    validPredictions = prediction.filter((prediction['prediction'] - prediction['label']).between(-50, 50)).count()
     storeMetric(df.count(), predictionsNumber, validPredictions)
 
 if __name__ == '__main__':
